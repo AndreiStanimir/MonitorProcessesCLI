@@ -26,7 +26,7 @@ namespace MonitorProcesses
 
         private ProcessMonitor CreateProcessMonitor()
         {
-            return new ProcessMonitor(1.4f, 0.1f, logger);
+            return new ProcessMonitor(1.4f, 0.1f, logger, new CancellationTokenSource());
         }
 
         //[TestCase("chrome")]
@@ -35,14 +35,15 @@ namespace MonitorProcesses
 
         public async Task MonitorProcess_StateUnderTest_ExpectedBehavior(string processName)
         {
-            if (Process.GetProcessesByName(processName).Length == 0)
+            var processes = Process.GetProcessesByName(processName);
+            if (processes.Length == 0)
                 Assert.Ignore($"process {processName} does not exist");
 
             // Arrange
             var processMonitor = this.CreateProcessMonitor();
 
             // Act
-            Process? process = await processMonitor.StartMonitorProcess(processName);
+            Process? process = await processMonitor.StartMonitorProcessAsync(processes.First());
             // Assert
             Assert.NotNull(process);
             Assert.True(process.HasExited);
@@ -52,8 +53,8 @@ namespace MonitorProcesses
         [TestCase("Google Chrome")]
         public async Task NoProcessFound(string processName)
         {
-            Process? process = await CreateProcessMonitor().StartMonitorProcess("asdfasdf");
-            Assert.IsNull(process);
+            var processes = Process.GetProcessesByName(processName);
+            Assert.IsEmpty(processes);
         }
     }
 }

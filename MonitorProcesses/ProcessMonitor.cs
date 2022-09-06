@@ -10,12 +10,12 @@ namespace MonitorProcesses
 {
     public class ProcessMonitor
     {
-        public ProcessMonitor(float maximumLifetimeInMinutes, float monitoringFrequencyInMinutes, ILogger logger)
+        public ProcessMonitor(float maximumLifetimeInMinutes, float monitoringFrequencyInMinutes, ILogger logger, CancellationTokenSource cancellationTokenSource)
         {
             MaximumLifetimeInMinutes = maximumLifetimeInMinutes;
             MonitoringFrequencyInMinutes = monitoringFrequencyInMinutes;
             this.logger = logger;
-            tokenSource = new CancellationTokenSource();
+            tokenSource = cancellationTokenSource;
             token = tokenSource.Token;
 
         }
@@ -26,14 +26,12 @@ namespace MonitorProcesses
         public float MaximumLifetimeInMinutes { get; }
         public float MonitoringFrequencyInMinutes { get; }
 
-        public async Task<Process?> StartMonitorProcess(int id)
+        public async Task<Process?> StartMonitorProcessAsync(Process process)
         {
-            var process = Process.GetProcessById(id);
-
             PeriodicTimer periodicTimer = new PeriodicTimer(TimeSpan.FromMinutes(MonitoringFrequencyInMinutes));
             float i = 0;
             for (; i < MaximumLifetimeInMinutes
-                   && await periodicTimer.WaitForNextTickAsync(token); i += MonitoringFrequencyInMinutes)
+                   && await  periodicTimer.WaitForNextTickAsync(token); i += MonitoringFrequencyInMinutes)
             {
                 logger.Information(process.TotalProcessorTime.TotalSeconds.ToString());
                 if (process.HasExited)
@@ -45,22 +43,30 @@ namespace MonitorProcesses
 
             if (i >= MaximumLifetimeInMinutes)
             {
-                logger.Information($"Killed procces with id:  {id}");
+                logger.Information($"Killed procces with id:  {process.Id}");
                 process.Kill(true);
             }
             return process;
         }
-        public async Task<Process?> StartMonitorProcess(string name)
+        public async Task StartMonitorProcessAsync(string name)
         {
+            PeriodicTimer periodicTimer = new PeriodicTimer(TimeSpan.FromMinutes(MonitoringFrequencyInMinutes));
             var processes = Process.GetProcessesByName(name);
-            if (processes.Length == 0)
+            while (await periodicTimer.WaitForNextTickAsync(token))
             {
-                logger.Error("No process found");
-                return null;
-            }
-            else
-            {
-                return await StartMonitorProcess(processes[0].Id);
+                if (!processes.Any() ||
+                    processes.All(p => p.HasExited))
+                    processes = Process.GetProcessesByName(name);
+                //if (processes.Length == 0)
+                //{
+                //    logger.Error("No process found");
+                //    return null;
+                //}
+
+                await Parallel.ForEachAsync(processes, token, async (process, token) =>
+                {
+                    await StartMonitorProcessAsync(process);
+                });
             }
         }
         public async Task Cancel()

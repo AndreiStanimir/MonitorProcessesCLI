@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "MonitorProcesses": {
+      "commandName": "Project",
+      "commandLineArgs": "spotify 2 0.1"
+    }
+  }
+}
